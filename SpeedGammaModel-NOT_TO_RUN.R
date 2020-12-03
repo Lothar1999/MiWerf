@@ -7,14 +7,15 @@
 #' Just copy the code between the curly brackets {}
 #' 
 
-speedGammaModel<- function (beta, dt){
+speedGammaModel<- function (beta, dt)
+  {
   if (any(dt <= 0)) 
     stop("Data not ordered in time")
   if (!is.matrix(beta)) 
     beta <- t(beta)
   if (ncol(beta) == 2) {
     estelle.logpb <- function(x, z) {
-      spd <- pmax.int(trackDist2(x, z), 1e-06)/flt_t
+      spd <- pmax.int(trackDist2(x, z), 1e-06)/dt
       bird_vec_angle <- directions(x, z)
       
       logpb_list <- wind_model(x,z, bird_vec_angle, dt)
