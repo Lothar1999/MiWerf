@@ -118,8 +118,8 @@ sensorIMG_2 <- function (date, sensor_data, tz = "UTC", plotx = TRUE, ploty = TR
 ########### set up parameters needed #######
 
 #Where is data stored
-folderName<- "12HM_20160630"
-birdName<- "12HM"
+folderName<- "14EZ_20160630"
+birdName<- "14EZ"
 Data <- paste0("P:/home/Documents/MSC_Thesis/Route_Inferrence/data/",folderName)
 # list all light files
 ID.list<-list.files(paste0("P:/home/Documents/MSC_Thesis/Route_Inferrence/data/", folderName),pattern=".glf",recursive = T) # Change to gle or glf - the one you use for analyses
@@ -149,7 +149,7 @@ dbname<- "sc24"
 host<- "sc24.geo.uzh.ch"
 
 #Parameter for result storage
-Route_name<- 'WM'
+Route_name<- 'NW' #This here is very important!!! NW for no wind and WM if wind data is included!!!
 Storage_path_route<-paste0('P:/home/Documents/MSC_Thesis/Route_Inferrence/Results/',birdName,'/VoWa/Route_', Route_name,'.png')
 LatAndLonPlot_Path<- paste0('P:/home/Documents/MSC_Thesis/Route_Inferrence/Results/',birdName,'/VoWa/LatLon_', Route_name,'.png')
 Summaryfile_Path<- paste0("P:/home/Documents/MSC_Thesis/Route_Inferrence/Results/",birdName,"/VoWa/",birdName,"_sumary_", Route_name,".csv")
@@ -204,7 +204,8 @@ lightImage( tagdata = raw,
 
 tsimageDeploymentLines(twl$Twilight, lon.calib, lat.calib, offset, lwd = 2, col = "orange")
 
-tm.calib <- as.POSIXct(c(start_twl, "2015-09-13 00:00", "2016-03-12 00:00", end_twl), tz = "UTC",format="%Y-%m-%d %H:%M") # Selecting calibration period(s) 
+
+tm.calib <- as.POSIXct(c("2015-07-20 00:00", "2015-08-03 00:00", "2016-05-05 00:00", "2016-05-19 00:00"), tz = "UTC",format="%Y-%m-%d %H:%M") # Selecting calibration period(s) 
 abline(v = tm.calib, lwd = 2, lty = 2, col = "red") # chech if them make sense on the light graph
 
 d_calib <- subset(twl, Twilight>=tm.calib[1] & Twilight<=tm.calib[2] | Twilight>=tm.calib[3] & Twilight<=tm.calib[4])
@@ -241,10 +242,12 @@ library(dplyr)
 # PAM Data import
 ID.list = list.files(paste0("~/MSC_Thesis/R_stuff/Msc_Thesis/data/",folderName,"/"),include.dirs=T)
 ID.list
+#Set idx at position where GLF file is found in the id list --> you want to read the glf file
 ID = ID.list[3]
 ID
 
 pathname = paste0("~/MSC_Thesis/R_stuff/Msc_Thesis/data/",folderName,"/")
+#Make sure all file names are correct
 measurements = c(".pressure", 
                  ".glf",
                  ".acceleration", 
@@ -270,7 +273,8 @@ tz<- "UTC"
 # get flight duration
 ID.list2 = list.files(Activity_path,pattern="_act",include.dirs=T) # this is the PAMLr output file of flight classification
 ID.list2
-ID2 = ID.list2[1]
+#Select the corect twl file
+ID2 = ID.list2[4]
 ID2
 
 timetable <- read.csv(paste0(Activity_path,ID2))
@@ -296,6 +300,7 @@ if(MigTable$end[length(MigTable$end)]>end_twl){
 }
 
 ############### Add flight times from activity timetable to twl file ######
+#Code from Kiran
 
 twl$dt <- 0
 twl$startMig<-0
@@ -352,32 +357,11 @@ end_index <- min(which(twl$Twilight >= as.POSIXct(timetable$end[index], tz=tz)))
 # do the fireplot
 (zenith_sd <- findHEZenith(twl, tol = 0.01, range=c(start_index,end_index-55)) )
 
-
-# Here starts the normal SGAT analyses
-tol=0.2 #adjust to a larger value to extrapolate more during the equinoq times
-
-# This will draw your initial track - play around with the tol value to find something that looks ok-ish.
-path <- thresholdPath(twl$Twilight, twl$Rise, zenith = zenith, tol=tol) # Here I use the zenith value from in-habitas calibration, alternatively replace zenith with zenith_sd for Hill-ekstrom calibration
-x0 <- path$x
-z0 <- trackMidpts(x0)
-plot(x0, type = "n", xlab = "", ylab = "")
-plot(wrld_simpl, col = "grey90", add = T)
-points(x0, pch=19, col="cornflowerblue", type = "o")
-points(lon.calib, lat.calib, pch = 16, cex = 2.5, col = "firebrick")
-box()
-
 #Set up connection to wind Data Base
 drv <- dbDriver("PostgreSQL")
 con <- dbConnect(drv, user=user, password=password, 
                  dbname = dbname, host = host)
 
-# Define known locations and set them as fixed locations. Ficed locations are not changed in BI
-fixedx <- rep_len(FALSE, length.out = nrow(x0))
-fixedx[1] <- TRUE # first stationary site - fixed
-fixedx[nrow(x0)] <- T # last stationary site - fixed
-x0[fixedx,1] <- lon.calib
-x0[fixedx,2] <- lat.calib
-z0 <- trackMidpts(x0)
 
 Site <- rep(0, len=length(twl$Twilight))
 stp <- timetable 
@@ -392,15 +376,27 @@ colours <- c("black",colorRampPalette(c("blue","yellow","red"))(max(Site)))
 # Create a vector which indicates which numbers sites as 111123444444567888889
 twl$group <- makeGroups(Site)
 g <- twl$group 
+gr<- g
+
+sites<-vector()
+for (i in 1:max(gr)){
+  a <- length(which(gr==i))
+  if (a == 1){sites<-c(sites,0)}else{sites<-c(sites,rep(i,a))}
+}
+for (j in 1:length(unique(sites[sites>0]))){
+  a<-unique(sites[sites>0])
+  sites[which(sites==a[j])]=j
+}
+sites<-sites[1:(length(sites)-1)]
 
 
 data <- data.frame(unique(cbind(from=twl$group[1:(length(twl$group)-1)], 
-                              to=twl$group[2:length(twl$group)],
-                              duration=twl$dt[1:(length(twl$group)-1)],
-                              stopover=Site[1:(length(twl$group)-1)],
-                              MigStart=twl$startMig[1:(length(twl$group)-1)],
-                              MigEnd=twl$endMig[1:(length(twl$group)-1)],
-                              idx=twl$idx[1:(length(twl$group)-1)])))
+                                to=twl$group[2:length(twl$group)],
+                                duration=twl$dt[1:(length(twl$group)-1)],
+                                stopover=Site[1:(length(twl$group)-1)],
+                                MigStart=twl$startMig[1:(length(twl$group)-1)],
+                                MigEnd=twl$endMig[1:(length(twl$group)-1)],
+                                idx=twl$idx[1:(length(twl$group)-1)])))
 
 data <- data[data$from != data$to,]
 head(data)
@@ -422,6 +418,8 @@ twl_idx<- twl_idx[idx]
 Mig_start[idx]<- as.numeric(as.POSIXct(twl$Twilight[twl_idx],format = "%Y-%m-%d %H:%M:%S", tz=tz))
 Mig_end[idx]<- as.numeric(as.POSIXct(twl$Twilight[twl_idx+1],format = "%Y-%m-%d %H:%M:%S", tz=tz))
 
+
+
 wind_t<- (Mig_start+Mig_end)/2
 
 behaviour <- c()
@@ -432,6 +430,21 @@ for (i in 1:max(g)){
 stationary <- grouped[behaviour]
 sitenum <- cumsum(stationary==T)
 sitenum[stationary==F] <- 0
+
+
+# Here starts the normal SGAT analyses
+tol=0.12 #adjust to a larger value to extrapolate more during the equinoq times
+
+# This will draw your initial track - play around with the tol value to find something that looks ok-ish.
+path <- thresholdPath(twl$Twilight, twl$Rise, zenith = zenith, tol=tol) # Here I use the zenith value from in-habitas calibration, alternatively replace zenith with zenith_sd for Hill-ekstrom calibration
+x0 <- path$x
+z0 <- trackMidpts(x0)
+plot(x0, type = "n", xlab = "", ylab = "")
+plot(wrld_simpl, col = "grey90", add = T)
+points(x0, pch=19, col="cornflowerblue", type = "o")
+points(lon.calib, lat.calib, pch = 16, cex = 2.5, col = "firebrick")
+box()
+
 x0 <- cbind(tapply(path$x[,1],twl$group,median), 
             tapply(path$x[,2],twl$group,median))
 
@@ -446,7 +459,6 @@ x0[fixedx,1] <- lon.calib
 x0[fixedx,2] <- lat.calib
 z0 <- trackMidpts(x0)
 
-
 # plot it
 xlim <- range(x0[,1]+c(-5,5))
 ylim <- range(0,55)
@@ -457,6 +469,7 @@ points(x0, pch=21, bg=colours[sitenum+1],
        col="black",cex = ifelse(sitenum>0, 3, 0))
 text(x0[sitenum>0,1], x0[sitenum>0,2],  sitenum[sitenum>0])
 box()
+
 
 index = ifelse(stationary, 1, 2)
 
@@ -473,8 +486,11 @@ z.proposal <- mvnorm(S = diag(c(0.005, 0.005)), n = nrow(z0))
 
 MigTimeTable<- cbind(Mig_start, Mig_end)
 
+
+
+
 ##' Read wind data from data base
-#Unique time stams
+#Unique time stamps
 time_list <- dbGetQuery(con, paste0("SELECT DISTINCT tms FROM", 
                                     "\"WindTable\"", ";"))
 
@@ -496,7 +512,7 @@ tm_end <- time_list$tms[end_list_idx]
 #Find all time stamps between each start and end time
 alt_t_idx<- seq(1,length(tm_start))
 tm<- lapply(alt_t_idx, FUN= function(x){
-  time_list[t_span<-which(time_list>= tm_start[x] & time_list<= tm_end[x]),1]
+  ifelse(tm_start[x]<tm_end[x], time_list[t_span<-which(time_list>= tm_start[x] & time_list<= tm_end[x]),1], time_list[t_span<-which(time_list>= tm_end[x] & time_list<= tm_start[x]),1])
 })
 
 
@@ -519,7 +535,7 @@ altcalc<- function(alt_idx){
   #alt<- unlist(lapply(alt_idx, FUN = function(x){mean(alt[x])}),recursive = T, use.names = T)
   alt<-  unlist(lapply(alt_idx, FUN = function(x){median(alt[[x]])}),recursive = T, use.names = T)
   alt <- mround(alt, 25)
-  alt <- ifelse(alt == 625, 650, alt)
+  alt <- ifelse(alt <= 625, 650, alt)
   alt <- ifelse(alt == 675, 650, alt)
   alt <- ifelse(alt == 725, 700, alt)
   alt <- ifelse(alt > 1000, 1000, alt)  
@@ -567,7 +583,7 @@ tm<-tmfk(time_list)
 
 #create query text for times
 str_1<- paste("tms=", tm," OR ", sep="",collapse = "")
-tm_str<- substr(str_1,1,nchar(str_1)-3)
+tm_str<- substr(str_1,1,nchar(str_1)-4)
 
 # Retrieve all distinct points from db
 query_winds <- paste0("SELECT ",db_heights,", tms, lats, lons
@@ -605,6 +621,17 @@ position_idx<- seq(1:(length(z0[,1])))
 #threshold value to set the length of the list segments to be concatenated
 th_listconcat<- length(wind_positions_DB[,1])
 
+#Sort problems out with duplicate time stamps
+if(length(anyDuplicated(tm)) == 1){
+  duplicateIDX<- which(duplicated(tm) == T)
+  for(i in duplicateIDX) { 
+    newrow<- test_wind[(((i*th_listconcat)-th_listconcat)+1):(i*th_listconcat),]
+    row<-(((i*th_listconcat)-th_listconcat)+1)
+    test_wind[seq(row+length(newrow[,1]), nrow(test_wind)+length(newrow[,1])),]<- test_wind[seq(row, nrow(test_wind)),]
+    test_wind[seq(row, (row+length(newrow[,1])-1)),]<- newrow
+  }
+}
+
 #generate subset of the windtable, to speed up wind data retrieval
 #list of times en route in lenght of available positions
 tms<- rep(tm[1], length.out = th_listconcat)
@@ -616,15 +643,33 @@ for (i in position_idx[-1]){
 #list of winds at required heights for each position in u direction
 u_list<- test_wind[,paste("u_",alt[1], collapse="",sep="")][which(test_wind$tms == tm[1])]
 
-for (i in position_idx[-1]){
-  u_list<-append(u_list, test_wind[,paste("u_",alt[i], collapse="",sep="")][which(test_wind$tms == tm[i])], after = length(u_list))
+for (i in c(2: length(position_idx))){
+  if(any(i == duplicateIDX)==T ){
+    u_list<-append(u_list, test_wind[,paste("u_",alt[i], collapse="",sep="")][which(test_wind$tms == tm[i])[1:length(newrow[,1])]], after = length(u_list))
+  }
+  else if(any(i == (duplicateIDX+1))==T){ 
+    u_list<-append(u_list, test_wind[,paste("u_",alt[i], collapse="",sep="")][which(test_wind$tms == tm[i])[1:length(newrow[,1])]], after = length(u_list))
+  }
+  else{
+    u_list<-append(u_list, test_wind[,paste("u_",alt[i], collapse="",sep="")][which(test_wind$tms == tm[i])], after = length(u_list))
+  }
+  
 }
 
-#list of winds at requiredheights for each position in v direction
+#list of winds at required heights for each position in v direction
 v_list<- test_wind[,paste("v_",alt[1], collapse="",sep="")][which(test_wind$tms == tm[1])]
 
-for (i in position_idx[-1]){
-  v_list<-append(v_list, test_wind[,paste("u_",alt[i], collapse="",sep="")][which(test_wind$tms == tm[i])], after = length(v_list))
+for (i in c(2: length(position_idx))){
+  if(any(i == duplicateIDX)==T){
+    v_list<-append(v_list, test_wind[,paste("v_",alt[i], collapse="",sep="")][which(test_wind$tms == tm[i])[1:length(newrow[,1])]], after = length(v_list))
+  }
+  else if(any(i == (duplicateIDX+1))==T){ 
+    v_list<-append(v_list, test_wind[,paste("v_",alt[i], collapse="",sep="")][which(test_wind$tms == tm[i])[1:length(newrow[,1])]], after = length(v_list))
+  }
+  else{
+    v_list<-append(v_list, test_wind[,paste("v_",alt[i], collapse="",sep="")][which(test_wind$tms == tm[i])], after = length(v_list))
+  }
+  
 }
 
 #create a geoindex
@@ -653,9 +698,9 @@ wind_model <- function(x,z, bird_vec_angle, dt) {
   #all indexes of the wind positions + and - 3 degree around the bird position are returned. These positions are then used to compute
   #wind speed and direction 
   #define search radius around bird position in degrees
-  sRad<- 30
+  sRad<- 100
   pos_subset<- lapply(position_idx, FUN = function(x){which(wind_positions_DB[,1] <= z[x,] + sRad & wind_positions_DB[,2] <= z[x,] + sRad & wind_positions_DB[,1] >= z[x,]-sRad & wind_positions_DB[,2] >= z[x,]-sRad)})
-  
+
   # Compute distance from each Point in x to each wind measurement position  found within +/- 3 degrees in wind_position_DB data table.
   dist <- lapply(position_idx, FUN=function(x){
     #start points of distance matrix
@@ -771,10 +816,11 @@ wind_model <- function(x,z, bird_vec_angle, dt) {
   #compute probabilities of each point along the migration route
   prob_list <- dgamma(spd, alpha_dist, beta_dist, 
                       log = T)
-  prob_list<- ifelse(is.nan(prob_list),-1000,prob_list)
+  prob_list<- ifelse(is.na(prob_list),-1000,prob_list)
   
   return(prob_list)
 }
+
 
 #change the SpeedGammaModel in SGAT to make sure our Movement model defined here is called when probabilities are computed
 #remember to copy paste the code from SpeedGammaModel.R and paste it between the {}
@@ -806,6 +852,7 @@ t1
 
 # Fit the model
 fit<- estelleMetropolis(model, x.proposal, z.proposal, iters = 1000, thin = 20)
+
 # plot outcome
 
 par(mfrow = c(1, 1), mar = c(2, 2, 2, 2) )
@@ -825,9 +872,6 @@ t
 x0 <- chainLast(fit$x)[[1]]
 z0 <- chainLast(fit$z)[[1]]
 
-
-
-
 # NB! If this next model doesn't run, there is something wrong with either calibration or stationary-movement period designation. 
 # A quick way to see if calibration may be wrong is to increase the zenith0 value and see if that helps the model to run - see the "+ 0.5" I did in this case
 # if that does not help then some of your stationary periods likely include movement and you have to go back and redefine them 
@@ -835,7 +879,7 @@ z0 <- chainLast(fit$z)[[1]]
 model <- groupedThresholdModel(twl$Twilight,
                                twl$Rise,
                                group = twl$group, #This is the group vector for each time the bird was at a point
-                               twilight.model = "Gamma", # this bit gere is what differs from the previously set model. "ModifiedGamma" will work always, but "Gamma" will fail when designation between stationary-movement phases are likely worong
+                               twilight.model = "ModifiedGamma", # this bit gere is what differs from the previously set model. "ModifiedGamma" will work always, but "Gamma" will fail when designation between stationary-movement phases are likely worong
                                alpha = alpha,
                                beta =  beta,
                                x0 = x0, # meadian point for each greoup (defined by twl$group)
@@ -855,9 +899,9 @@ for (k in 1:5) {
                            z0 = chainLast(fit$z)[[1]], iters = 300, thin = 20)
 }
 t2<- Sys.time()
+
 t<-t2-t1
 t
-
 
 ## Check if MCMC chains mix - you generally want a messy plot with no obvious white areas somewhere in the middle
 opar<- par(mfrow = c(2, 1), mar = c(3, 5, 2, 1) + 0.1)
@@ -906,7 +950,7 @@ s <- slices(type = "intermediate", mcmc = fit, grid = r)
 # sk <- slice(s, sliceIndices(s))
 sk <- log(SGAT::slice(s, sliceIndices(s))+1)
 
-plot(wrld_simpl, xlim=xlim, ylim=ylim)
+plot(wrld_simpl, xlim=xlim, ylim=c(-5,50))
 plot(sk, useRaster = F,col = c("transparent", rev(viridis::viridis(50,alpha=.8))),add=T)
 
 with(sm[sitenum>0,], arrows(`Lon.50%`, `Lat.50%`+`Lat.sd`, `Lon.50%`, `Lat.50%`-`Lat.sd`, length = 0, lwd = 2.5, col = "firebrick"))
@@ -1070,7 +1114,7 @@ wind_model <- function(x,z, bird_vec_angle, dt) {
   ms2kmh<- 3.6
   
   #compute wind speed and wind direction at each position
-  wind_speeds<- unlist(lapply(position_idx,FUN=function(x){sqrt(wind_speeds_xy[[x]][[1]]^2 + wind_speeds_xy[[x]][[2]]^2)/2 * ms2kmh}),recursive = T, use.names = T)
+  wind_speeds<- unlist(lapply(position_idx,FUN=function(x){sqrt(wind_speeds_xy[[x]][[1]]^2 + wind_speeds_xy[[x]][[2]]^2) * ms2kmh}),recursive = T, use.names = T)
   
   wind_directions<- unlist(lapply(position_idx,FUN = function(x){atan2(wind_speeds_xy[[x]][[2]],wind_speeds_xy[[x]][[1]])}), recursive = T, use.names = T)
   
@@ -1103,7 +1147,7 @@ wind_model <- function(x,z, bird_vec_angle, dt) {
   mag_comp <- sin(alpha)*wind_speeds
   
   #After computing the compensation vector, the ground speed vector is computed
-  new_b_speed <- (cos(alpha)*wind_speeds) + sqrt((beta[1] * (1/beta[2]))^2 - mag_comp^2)
+  new_b_speed <- (cos(alpha)*wind_speeds) + ifelse(is.nan(sqrt((beta[1] * (1/beta[2]))^2 - mag_comp^2)), 0,sqrt((beta[1] * (1/beta[2]))^2 - mag_comp^2))
   
   #sigma of bird speed according to Bruderer er al, Bolch & Brudrer and Liechti & Bruderer
   bird_speed_sigma <- 3.5 
@@ -1153,7 +1197,7 @@ wind_model <- function(x,z, bird_vec_angle, dt) {
   #all indexes of the wind positions + and - 3 degree around the bird position are returned. These positions are then used to compute
   #wind speed and direction 
   #define search radius around bird position in degrees
-  sRad<- 25
+  sRad<- 5000
   pos_subset<- lapply(position_idx, FUN = function(x){which(wind_positions_DB[,1] <= z[x,] + sRad & wind_positions_DB[,2] <= z[x,] + sRad & wind_positions_DB[,1] >= z[x,]-sRad & wind_positions_DB[,2] >= z[x,]-sRad)})
   
   # Compute distance from each Point in x to each wind measurement position  found within +/- 3 degrees in wind_position_DB data table.
@@ -1213,7 +1257,7 @@ wind_model <- function(x,z, bird_vec_angle, dt) {
     swspeeds<-apply(weig_wind_speed[[x]], 2,sum) / sum_weights[[x]]})
   
   #compute wind speed and wind direction at each position
-  wind_speeds<- unlist(lapply(position_idx,FUN=function(x){sqrt(wind_speeds_xy[[x]][[1]]^2 + wind_speeds_xy[[x]][[2]]^2)/2 }),recursive = T, use.names = T)
+  wind_speeds<- unlist(lapply(position_idx,FUN=function(x){sqrt(wind_speeds_xy[[x]][[1]]^2 + wind_speeds_xy[[x]][[2]]^2)}),recursive = T, use.names = T)
   
 }
 
@@ -1382,8 +1426,6 @@ write.csv(wind_data_csv, WindData_Path, row.names = F)
 #           row.names = F)
 # 
 # 
-
-
 # END
 #
 
