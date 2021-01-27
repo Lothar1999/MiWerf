@@ -118,8 +118,8 @@ sensorIMG_2 <- function (date, sensor_data, tz = "UTC", plotx = TRUE, ploty = TR
 ########### set up parameters needed #######
 
 #Where is data stored
-folderName<- "14EZ_20160630"
-birdName<- "14EZ"
+folderName<- "16BG_20170612"
+birdName<- "16BG"
 Data <- paste0("P:/home/Documents/MSC_Thesis/Route_Inferrence/data/",folderName)
 # list all light files
 ID.list<-list.files(paste0("P:/home/Documents/MSC_Thesis/Route_Inferrence/data/", folderName),pattern=".glf",recursive = T) # Change to gle or glf - the one you use for analyses
@@ -149,7 +149,7 @@ dbname<- "sc24"
 host<- "sc24.geo.uzh.ch"
 
 #Parameter for result storage
-Route_name<- 'NW' #This here is very important!!! NW for no wind and WM if wind data is included!!!
+Route_name<- 'NW'
 Storage_path_route<-paste0('P:/home/Documents/MSC_Thesis/Route_Inferrence/Results/',birdName,'/VoWa/Route_', Route_name,'.png')
 LatAndLonPlot_Path<- paste0('P:/home/Documents/MSC_Thesis/Route_Inferrence/Results/',birdName,'/VoWa/LatLon_', Route_name,'.png')
 Summaryfile_Path<- paste0("P:/home/Documents/MSC_Thesis/Route_Inferrence/Results/",birdName,"/VoWa/",birdName,"_sumary_", Route_name,".csv")
@@ -205,7 +205,7 @@ lightImage( tagdata = raw,
 tsimageDeploymentLines(twl$Twilight, lon.calib, lat.calib, offset, lwd = 2, col = "orange")
 
 
-tm.calib <- as.POSIXct(c("2015-07-20 00:00", "2015-08-03 00:00", "2016-05-05 00:00", "2016-05-19 00:00"), tz = "UTC",format="%Y-%m-%d %H:%M") # Selecting calibration period(s) 
+tm.calib <- as.POSIXct(c("2016-07-20 00:00", "2016-08-12 00:00", "2017-04-15 00:00", "2017-04-28 00:00"), tz = "UTC",format="%Y-%m-%d %H:%M") # Selecting calibration period(s) 
 abline(v = tm.calib, lwd = 2, lty = 2, col = "red") # chech if them make sense on the light graph
 
 d_calib <- subset(twl, Twilight>=tm.calib[1] & Twilight<=tm.calib[2] | Twilight>=tm.calib[3] & Twilight<=tm.calib[4])
@@ -274,7 +274,7 @@ tz<- "UTC"
 ID.list2 = list.files(Activity_path,pattern="_act",include.dirs=T) # this is the PAMLr output file of flight classification
 ID.list2
 #Select the corect twl file
-ID2 = ID.list2[4]
+ID2 = ID.list2[9]
 ID2
 
 timetable <- read.csv(paste0(Activity_path,ID2))
@@ -300,7 +300,6 @@ if(MigTable$end[length(MigTable$end)]>end_twl){
 }
 
 ############### Add flight times from activity timetable to twl file ######
-#Code from Kiran
 
 twl$dt <- 0
 twl$startMig<-0
@@ -490,7 +489,7 @@ MigTimeTable<- cbind(Mig_start, Mig_end)
 
 
 ##' Read wind data from data base
-#Unique time stamps
+#Unique time stams
 time_list <- dbGetQuery(con, paste0("SELECT DISTINCT tms FROM", 
                                     "\"WindTable\"", ";"))
 
@@ -698,7 +697,7 @@ wind_model <- function(x,z, bird_vec_angle, dt) {
   #all indexes of the wind positions + and - 3 degree around the bird position are returned. These positions are then used to compute
   #wind speed and direction 
   #define search radius around bird position in degrees
-  sRad<- 100
+  sRad<- 200
   pos_subset<- lapply(position_idx, FUN = function(x){which(wind_positions_DB[,1] <= z[x,] + sRad & wind_positions_DB[,2] <= z[x,] + sRad & wind_positions_DB[,1] >= z[x,]-sRad & wind_positions_DB[,2] >= z[x,]-sRad)})
 
   # Compute distance from each Point in x to each wind measurement position  found within +/- 3 degrees in wind_position_DB data table.
@@ -761,7 +760,7 @@ wind_model <- function(x,z, bird_vec_angle, dt) {
   ms2kmh<- 3.6
   
   #compute wind speed and wind direction at each position
-  wind_speeds<- unlist(lapply(position_idx,FUN=function(x){sqrt(wind_speeds_xy[[x]][[1]]^2 + wind_speeds_xy[[x]][[2]]^2)/2 * ms2kmh}),recursive = T, use.names = T)
+  wind_speeds<- unlist(lapply(position_idx,FUN=function(x){sqrt(wind_speeds_xy[[x]][[1]]^2 + wind_speeds_xy[[x]][[2]]^2) * ms2kmh}),recursive = T, use.names = T)
   
   wind_directions<- unlist(lapply(position_idx,FUN = function(x){atan2(wind_speeds_xy[[x]][[2]],wind_speeds_xy[[x]][[1]])}), recursive = T, use.names = T)
   
@@ -826,8 +825,8 @@ wind_model <- function(x,z, bird_vec_angle, dt) {
 #remember to copy paste the code from SpeedGammaModel.R and paste it between the {}
 trace(speedGammaModel,edit = T)
 #untrace(speedGammaModel)
-
-
+trace(estelleMetropolis,edit=T)
+untrace(estelleMetropolis)
 
 #After tracing the function remember to rerun the model (groupedThresholdModel)
 model <- groupedThresholdModel(twl$Twilight,
@@ -889,6 +888,7 @@ model <- groupedThresholdModel(twl$Twilight,
                                dt = dt$duration,
                                fixedx = fixedx)
 
+
 t1<-Sys.time()
 t1
 
@@ -934,8 +934,8 @@ t
 
 # Summarize the results----
 sm <- locationSummary(fit$x, time=fit$model$time)
-
-
+sm_z <- locationSummary(fit$z,time = fit$model$time)
+z<- cbind(sm_z$Lon.mean,sm_z$Lat.mean)
 # Plot the results----
 # pdf(paste0("PAM analyses/Results/Tracking/", substring(ID,1,5), "_SGAT_GroupSummary1.pdf"))
 
@@ -1007,27 +1007,22 @@ plot(temp$`Lon.50%`~twl$Twilight, pch=ifelse(sites==0,1,16),ylim=xlim,
 
 dev.off()
 
-#get harmonic mean of coordinates of all iterations
-idx_hm<- seq(1,length(x0[,1]))
-lat_hm<- unlist(lapply(idx_hm, FUN=function(x){harmonic.mean(fit$x[[1]][x,2,])}))
-lon_hm<- unlist(lapply(idx_hm, FUN=function(x){harmonic.mean(fit$x[[1]][x,1,])}))
+#get harmonic mean of solar positioning
+idx<-c(1:length(x[,1]))
 
-x_hm<- cbind(lon_hm,lat_hm)
+hm_list<- unlist(lapply(idx, FUN=function(p){
+  harmonic.mean(logDF[p,],na.rm = T,zero = F)
+}))
 
-#compute middle pts amd flit directionof harmonic mean route
-z_hm<- trackMidpts(x_hm)
-
-bird_vec_angle<- directions(x_hm,z_hm)
-
-#place harmonic mean of lat and lon
-sm<-cbind(sm, lat_hm)
-sm<-cbind(sm,lon_hm)
+sm<- cbind(sm,hm_list)
 
 ## Visualization of results and data
 x0 <- track
 z0 <- trackMidpts(x0)
+x<- cbind(sm$Lon.mean,sm$Lat.mean)
+spd_z <- pmax.int(trackDist2(x, z), 1e-06)/dt$duration
+spd_z0<- pmax.int(trackDist2(x0, z0), 1e-06)/dt$duration
 
-spd <- pmax.int(trackDist2(x0, z0), 1e-06)/dt$duration
 bird_vec_angle<- directions(x0,z0)
 
 prob_list_log<- wind_model(x0,z0, bird_vec_angle, dt$duration)
